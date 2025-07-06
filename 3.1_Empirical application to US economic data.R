@@ -1,297 +1,198 @@
+################################################################################
+## 0. Preparations -------------------------------------------------------------
+################################################################################
+library(lubridate)
+library(dplyr)
+library(nowcasting)     # PRTDB, Bpanel, nowcast, etc.
+library(quantreg)
+library(Metrics)        # rmse
+library(moments)        # skewness, kurtosis
 
-#The CSV file can be obtained by downloading the 'inflation data' file at the main page. 
-kocsv<-read.csv("C:\\Users\\US_economic_data.csv", header = TRUE)
-kocsv$X<-as.Date(kocsv$X)
+## Data ------------------------------------------------------------------------
+kocsv <- read.csv("C:\\Users\\US_economic_data.csv", header = TRUE)
+kocsv$X <- as.Date(kocsv$X)
 
-#Initial value setting 
-enddate<-seq(ymd('2005-04-01'),ymd('2020-01-01'), by = 'quarter')
-leng<-15
-train_year<-4
+## (A) End‑date sequences ------------------------------------------------------
+## Rolling‑window end‑date sequences (12 different windows)
+enddate_list <- list(
+  # ① Post‑dot‑com low‑volatility period (4 yr)
+  "2001Q1–2004Q4" = seq(ymd("2001-01-01"), ymd("2005-01-01"), by = "quarter"),
 
-MSE_lm<-rep(0,leng)
-MSE_qu_1<-rep(0,leng)
-MSE_qu_2<-rep(0,leng)
-MSE_qu_3<-rep(0,leng)
-MSE_ba<-rep(0,leng)
-MSE_sa<-rep(0,leng)
-skew<-rep(0,leng)
+  # ② Low‑rate housing boom (3 yr)
+  "2003Q1–2005Q4" = seq(ymd("2003-01-01"), ymd("2006-01-01"), by = "quarter"),
 
+  # ③ Sub‑prime warning to pre‑crisis (2.5 yr)
+  "2005Q3–2007Q4" = seq(ymd("2005-07-01"), ymd("2008-01-01"), by = "quarter"),
 
-#One quarter ahead
-for (i in 1:leng) {
-  q<-enddate[i]
-  styear<-as.numeric(substring(q, 3,4))
-  start_date<-q %m-% years(train_year)
-  start_year<-as.numeric(substring(start_date, 1,4))
-  start_mon<-as.numeric(substring(start_date, 6,7))
-  start_qua<-(start_mon+2)/3
-  
-  start_date_2<-start_date %m-% months(3)
-  styear_2<-as.numeric(substring(start_date_2, 3,4))
-  start_year_2<-as.numeric(substring(start_date_2, 1,4))
-  start_mon_2<-as.numeric(substring(start_date_2, 6,7))
-  start_qua_2<-(start_mon_2+2)/3
-  
-  kocsv2<-kocsv%>%
-    select(-CPI)%>%
-    filter(X>=start_date &X<q)
-  
-  cpi<-kocsv%>%
-    filter(X>=start_date &X<q)%>%
-    select(CPI)
-  
-  cpi<-as.vector(cpi$CPI)
-  cpi2<-cpi[seq(1, length(cpi), by=3)]
-  cpi3<-replace(cpi2, length(cpi2),NA)
-  
-  base <- ts(kocsv2[,-1], start=c(start_year,start_mon ), frequency=12)
-  trans<-rep(3,56)
-  delay<-rep(0,56)
-  
-  GDP_qtr<-ts(cpi3,start = c(start_year,start_qua), frequency=4)
-  BRGDP<-list(base=base,trans=trans,delay=delay)
-  
-  vintage <- PRTDB(mts = BRGDP$base, delay = BRGDP$delay, vintage = "2019-10-01")
-  base <- window(vintage, start = c(start_year,start_mon), frequency = 12)
-  x <- Bpanel(base = base, trans = BRGDP$trans)
-  
-  y <- diff(diff(GDP_qtr,4))
-  y <- qtr2month(y)
-  
-  data <- cbind(y,x)
-  frequency <- c(4,rep(12,ncol(x)))
-  
-  now11 <- nowcast(formula = y~., data = data, r = 2, q = 2 , p = 1, method = "2s",
-                   frequency = frequency)
-  
-  fatoresTS<-now11$factors$dynamic_factors
-  fatoresTRI <- month2qtr(fatoresTS)
-  ppp<-diff(diff(GDP_qtr,4))
-  ppp<-as.vector(ppp)
-  
-  www<-fatoresTRI[,1]
-  www2<-www[6:(length(www)-5)]
-  wwww<-fatoresTRI[,2]
-  www3<-wwww[6:(length(www)-5)]
-  www1<-ppp[1:(length(ppp)-1)]
-  dop<-as.data.frame(cbind(www1, www2, www3))
-  fit<-lm(www1~www2+www3, data = dop)
-  
-  final<-fit$coefficients[1]+(fit$coefficients[2])*(www)+(fit$coefficients[3])*(wwww)
-  predict_final_lm<-(as.vector(final))[(length(final)-4):length(final)]
-  
-  #quantile reg
-  qvector_1<-rep(0,5)
-  for (j in 1:3) {
-    rqfit<-rq(www1~www2+www3, data = dop, tau=j/4)
-    final_2<-rqfit$coefficients[1]+(rqfit$coefficients[2])*(www)+(rqfit$coefficients[3])*(wwww)
-    predict_final_2<-(as.vector(final_2))[(length(final_2)-4):length(final_2)]
-    qvector_1<-qvector_1+predict_final_2
-  }
-  predict_final_qu_1<-qvector_1/3
-  
-  qvector_2<-rep(0,5)
-  for (j in 1:4) {
-    rqfit_2<-rq(www1~www2+www3, data = dop, tau=j/5)
-    final_3<-rqfit_2$coefficients[1]+(rqfit_2$coefficients[2])*(www)+(rqfit_2$coefficients[3])*(wwww)
-    predict_final_3<-(as.vector(final_3))[(length(final_3)-4):length(final_3)]
-    qvector_2<-qvector_2+predict_final_3
-  }
-  predict_final_qu_2<-qvector_2/4
-  
-  qvector_3<-rep(0,5)
-  for (j in 1:4) {
-    rqfit_3<-rq(www1~www2+www3, data = dop, tau=j/5)
-    final_4<-rqfit_3$coefficients[1]+(rqfit_3$coefficients[2])*(www)+(rqfit_3$coefficients[3])*(wwww)
-    predict_final_4<-(as.vector(final_3))[(length(final_3)-4):length(final_3)]
-    qvector_3<-qvector_3+predict_final_4*(2.5-abs(2.5-j))
-  }
-  predict_final_qu_3<-qvector_3/6
-  
-  cpi4<-kocsv%>%
-    filter(X>=start_date)%>%
-    select(X, CPI)
-  
-  cpi5<-as.vector(cpi4$CPI)
-  cpi6<-cpi5[seq(1, length(cpi5), by=3)]
-  
-  GDP_qtr_2<-ts(cpi6,start = c(start_year,start_qua), frequency=4)
-  
-  y2 <- diff(diff(GDP_qtr_2,4))
-  
-  lowyear<-4+start_year_2
-  upyear<-5+start_year_2
-  real<-as.vector(window(y2, start=c(lowyear, start_qua_2), end=c(upyear, start_qua_2)))
-  
-  GDP_qtr_3<-ts(lag(cpi6),start = c(start_year,start_qua), frequency=4)
-  
-  y3 <- diff(diff(GDP_qtr_3,4))
-  
-  baseline<-as.vector(window(y3,start=c(lowyear, start_qua_2), end=c(upyear, start_qua_2)))
-  
-  cpi7<-as.vector(diff(diff(GDP_qtr,4)))
-  sarima_data<-cpi7[1:(length(cpi7)-1)]
-  sarima_for<-as.vector(arimapred(sarima_data, n.ahead = 5))
-  
-  MSE_lm[i]<-rmse(real[1], predict_final_lm[1])
-  MSE_qu_1[i]<-rmse(real[1], predict_final_qu_1[1])
-  MSE_qu_2[i]<-rmse(real[1], predict_final_qu_2[1])
-  MSE_qu_3[i]<-rmse(real[1], predict_final_qu_3[1])
-  MSE_ba[i]<-rmse(real[1], baseline[1])
-  MSE_sa[i]<-rmse(real[1],sarima_for[1])
-  skew[i]<-skewness(www1)
+  # ④ Global Financial Crisis core (high kurtosis, 2 yr)
+  "2007Q3–2009Q2" = seq(ymd("2007-07-01"), ymd("2009-07-01"), by = "quarter"),
+
+  # ⑤ Immediate post‑crisis + QE1 (3 yr)
+  "2008Q3–2011Q2" = seq(ymd("2008-07-01"), ymd("2011-07-01"), by = "quarter"),
+
+  # ⑥ Trump tax‑cut & trade dispute (3 yr)
+  "2016Q1–2018Q4" = seq(ymd("2016-01-01"), ymd("2019-01-01"), by = "quarter"),
+
+  # ⑦ Two years just before COVID‑19
+  "2018Q1–2019Q4" = seq(ymd("2018-01-01"), ymd("2020-01-01"), by = "quarter"),
+
+  # ⑧ Full 2000s decade (10 yr window)
+  "2001Q1–2010Q4" = seq(ymd("2001-01-01"), ymd("2011-01-01"), by = "quarter"),
+
+  # ⑨ Most recent 11 yr (taper‑tantrum → pandemic → inflation surge)
+  "2013Q1–2023Q4" = seq(ymd("2013-01-01"), ymd("2024-01-01"), by = "quarter"),
+
+  # ⑩ Pre‑crisis through QE1 completion (5 yr)
+  "2006Q1–2010Q4" = seq(ymd("2006-01-01"), ymd("2011-01-01"), by = "quarter"),
+
+  # ⑪ Crisis core + early aftermath (high kurtosis, 3.5 yr)
+  "2007Q3–2010Q4" = seq(ymd("2007-07-01"), ymd("2011-01-01"), by = "quarter"),
+
+  # ⑫ US‑China trade‑war window (high kurtosis, 3.5 yr)
+  "2017Q1–2020Q2" = seq(ymd("2017-01-01"), ymd("2020-07-01"), by = "quarter")
+)
+
+train_year <- 4   # training‑window length (years)
+
+################################################################################
+## 1. Core computation function (original logic kept) --------------------------
+################################################################################
+calc_metrics <- function(enddate_vec) {
+
+  leng <- length(enddate_vec)
+  MSE_lm  <- numeric(leng)
+  MSE_QR  <- numeric(leng)
+  MSE_AQR <- numeric(leng)
+  skew <- numeric(leng)
+  kurt <- numeric(leng)
+
+  for (i in seq_len(leng)) {
+
+    ## tryCatch: skip this step if an error/NaN occurs
+    tryCatch({
+      q           <- enddate_vec[i]
+      start_date  <- q %m-% years(train_year)
+      start_year  <- year(start_date)
+      start_mon   <- month(start_date)
+      start_qua   <- (start_mon + 2) / 3
+
+      ## ---------- Split X and CPI -------------------------------------------
+      kocsv_x <- kocsv |>
+        select(-CPI) |>
+        filter(X >= start_date & X < q)
+
+      cpi_vec <- kocsv |>
+        filter(X >= start_date & X < q) |>
+        pull(CPI)
+      if (length(cpi_vec) < 12) stop("insufficient sample")
+
+      cpi_q <- cpi_vec[seq(1, length(cpi_vec), by = 3)]
+      cpi_q[length(cpi_q)] <- NA        # target to forecast
+
+      ## ---------- Factor nowcasting -----------------------------------------
+      base   <- ts(kocsv_x[,-1], start = c(start_year, start_mon), frequency = 12)
+      trans  <- rep(3, ncol(base))
+      delay  <- rep(0, ncol(base))
+
+      GDP_qtr <- ts(cpi_q, start = c(start_year, start_qua), frequency = 4)
+
+      BRGDP   <- list(base = base, trans = trans, delay = delay)
+      vintage <- PRTDB(mts = BRGDP$base, delay = BRGDP$delay,
+                       vintage = "2019-10-01")
+      base_v  <- window(vintage, start = c(start_year, start_mon), frequency = 12)
+      x_panel <- Bpanel(base = base_v, trans = BRGDP$trans)
+
+      y_month <- diff(diff(GDP_qtr, 4))
+      y_month <- qtr2month(y_month)
+
+      data_all  <- cbind(y_month, x_panel)
+      frequency <- c(4, rep(12, ncol(x_panel)))
+
+      now_res <- nowcast(
+        formula   = y_month ~ .,
+        data      = data_all,
+        r = 2, q = 2, p = 1, method = "2s",
+        frequency = frequency
+      )
+
+      factors_ts  <- now_res$factors$dynamic_factors
+      factors_qtr <- month2qtr(factors_ts)
+
+      ## ---------- Regression data (1‑quarter‑ahead) -------------------------
+      y_target <- diff(diff(GDP_qtr, 4))
+      y_vec    <- as.vector(y_target)
+
+      f1 <- factors_qtr[,1]; f1_lag <- f1[6:(length(f1) - 5)]
+      f2 <- factors_qtr[,2]; f2_lag <- f2[6:(length(f2) - 5)]
+      y_lag <- y_vec[1:(length(y_vec) - 1)]
+
+      regress_df <- data.frame(y_lag, f1_lag, f2_lag)
+
+      ## ---------- (A) OLS ----------------------------------------------------
+      lm_fit <- lm(y_lag ~ f1_lag + f2_lag, data = regress_df)
+      lm_pred_full <- lm_fit$coefficients[1] +
+        lm_fit$coefficients[2]*f1 +
+        lm_fit$coefficients[3]*f2
+      pred_OLS <- tail(lm_pred_full, 5)[1]
+
+      ## ---------- (B) QR / AQR ----------------------------------------------
+      tau_vec <- c(0.25, 0.50, 0.75)
+      qr_pred_each <- sapply(tau_vec, function(tau) {
+        rq_fit <- rq(y_lag ~ f1_lag + f2_lag, data = regress_df, tau = tau)
+        rq_pred_full <- rq_fit$coefficients[1] +
+          rq_fit$coefficients[2]*f1 +
+          rq_fit$coefficients[3]*f2
+        tail(rq_pred_full, 5)[1]
+      })
+      pred_QR  <- qr_pred_each[2]             # τ = 0.50
+      pred_AQR <- mean(qr_pred_each)          # equal‑weight average
+
+      ## ---------- Store metrics ---------------------------------------------
+      y_real_full <- diff(diff(ts(cpi_vec, frequency = 4), 4))
+      y_real <- tail(as.vector(y_real_full), 5)[1]
+
+      MSE_lm[i]  <- rmse(y_real, pred_OLS)
+      MSE_QR[i]  <- rmse(y_real, pred_QR)
+      MSE_AQR[i] <- rmse(y_real, pred_AQR)
+
+      skew[i] <- skewness(y_lag, na.rm = TRUE)
+      kurt[i] <- kurtosis(y_lag, na.rm = TRUE)
+
+    }, error = function(e) {
+      ## If an error occurs, store NA (ignored in mean calculations)
+      MSE_lm[i]  <<- NA;  MSE_QR[i]  <<- NA;  MSE_AQR[i] <<- NA
+      skew[i]    <<- NA;  kurt[i]    <<- NA
+    })
+  } # end for i
+
+  list(
+    mean_abs_skew = mean(abs(skew), na.rm = TRUE),
+    mean_kurt     = mean(kurt,      na.rm = TRUE),
+    RMSE_OLS      = mean(MSE_lm,    na.rm = TRUE),
+    RMSE_QR       = mean(MSE_QR,    na.rm = TRUE),
+    RMSE_AQR      = mean(MSE_AQR,   na.rm = TRUE)
+  )
 }
 
-#Information Criteria
-ICfactors(x)
-ICshocks(x)
+################################################################################
+## 2. Compute & summarise results per window -----------------------------------
+################################################################################
+results_all <- lapply(enddate_list, calc_metrics)
 
-#output
-mean(abs(skew))
-mean(MSE_lm)
-mean(MSE_qu_2)
-mean(MSE_sa)
-mean(MSE_ba)
+summary_tbl <- do.call(
+  rbind,
+  Map(function(name, res) {
+    data.frame(
+      Window        = name,
+      mean_abs_skew = round(res$mean_abs_skew, 3),
+      mean_kurtosis = round(res$mean_kurt, 3),
+      RMSE_OLS      = round(res$RMSE_OLS, 3),
+      RMSE_QR       = round(res$RMSE_QR, 3),
+      RMSE_AQR      = round(res$RMSE_AQR, 3),
+      check.names   = FALSE
+    )
+  },
+  names(enddate_list), results_all)
+)
 
-
-
-
-
-#Three quarters ahead
-for (i in 1:leng) {
-  q<-enddate[i]
-  styear<-as.numeric(substring(q, 3,4))
-  start_date<-q %m-% years(train_year)
-  start_year<-as.numeric(substring(start_date, 1,4))
-  start_mon<-as.numeric(substring(start_date, 6,7))
-  start_qua<-(start_mon+2)/3
-  
-  start_date_2<-start_date %m-% months(3)
-  styear_2<-as.numeric(substring(start_date_2, 3,4))
-  start_year_2<-as.numeric(substring(start_date_2, 1,4))
-  start_mon_2<-as.numeric(substring(start_date_2, 6,7))
-  start_qua_2<-(start_mon_2+2)/3
-  
-  kocsv2<-kocsv%>%
-    select(-CPI)%>%
-    filter(X>=start_date &X<q)
-  
-  cpi<-kocsv%>%
-    filter(X>=start_date &X<q)%>%
-    select(CPI)
-  
-  cpi<-as.vector(cpi$CPI)
-  cpi2<-cpi[seq(1, length(cpi), by=3)]
-  cpi3<-replace(cpi2, length(cpi2),NA)
-  
-  base <- ts(kocsv2[,-1], start=c(start_year,start_mon ), frequency=12)
-  trans<-rep(3,56)
-  delay<-rep(0,56)
-  
-  GDP_qtr<-ts(cpi3,start = c(start_year,start_qua), frequency=4)
-  BRGDP<-list(base=base,trans=trans,delay=delay)
-  
-  vintage <- PRTDB(mts = BRGDP$base, delay = BRGDP$delay, vintage = "2019-10-01")
-  base <- window(vintage, start = c(start_year,start_mon), frequency = 12)
-  x <- Bpanel(base = base, trans = BRGDP$trans)
-
-  y <- diff(diff(GDP_qtr,4))
-  y <- qtr2month(y)
-  
-  data <- cbind(y,x)
-  frequency <- c(4,rep(12,ncol(x)))
-  
-  now11 <- nowcast(formula = y~., data = data, r = 2, q =2 , p = 1, method = "2s",
-                   frequency = frequency)
-  
-  fatoresTS<-now11$factors$dynamic_factors
-  fatoresTRI <- month2qtr(fatoresTS)
-  ppp<-diff(diff(GDP_qtr,4))
-  ppp<-as.vector(ppp)
-  
-  www<-fatoresTRI[,1]
-  www2<-www[6:(length(www)-5)]
-  wwww<-fatoresTRI[,2]
-  www3<-wwww[6:(length(www)-5)]
-  www1<-ppp[1:(length(ppp)-1)]
-  dop<-as.data.frame(cbind(www1, www2, www3))
-  fit<-lm(www1~www2+www3, data = dop)
-  
-  final<-fit$coefficients[1]+(fit$coefficients[2])*(www)+(fit$coefficients[3])*(wwww)
-  predict_final_lm<-(as.vector(final))[(length(final)-4):length(final)]
-  
-  #quantile reg
-  qvector_1<-rep(0,5)
-  for (j in 1:3) {
-    rqfit<-rq(www1~www2+www3, data = dop, tau=j/4)
-    final_2<-rqfit$coefficients[1]+(rqfit$coefficients[2])*(www)+(rqfit$coefficients[3])*(wwww)
-    predict_final_2<-(as.vector(final_2))[(length(final_2)-4):length(final_2)]
-    qvector_1<-qvector_1+predict_final_2
-  }
-  predict_final_qu_1<-qvector_1/3
-  
-  qvector_2<-rep(0,5)
-  for (j in 1:4) {
-    rqfit_2<-rq(www1~www2+www3, data = dop, tau=j/5)
-    final_3<-rqfit_2$coefficients[1]+(rqfit_2$coefficients[2])*(www)+(rqfit_2$coefficients[3])*(wwww)
-    predict_final_3<-(as.vector(final_3))[(length(final_3)-4):length(final_3)]
-    qvector_2<-qvector_2+predict_final_3
-  }
-  predict_final_qu_2<-qvector_2/4
-  
-  qvector_3<-rep(0,5)
-  for (j in 1:4) {
-    rqfit_3<-rq(www1~www2+www3, data = dop, tau=j/5)
-    final_4<-rqfit_3$coefficients[1]+(rqfit_3$coefficients[2])*(www)+(rqfit_3$coefficients[3])*(wwww)
-    predict_final_4<-(as.vector(final_3))[(length(final_3)-4):length(final_3)]
-    qvector_3<-qvector_3+predict_final_4*(2.5-abs(2.5-j))
-  }
-  predict_final_qu_3<-qvector_3/6
-  
-  cpi4<-kocsv%>%
-    filter(X>=start_date)%>%
-    select(X, CPI)
-  
-  cpi5<-as.vector(cpi4$CPI)
-  cpi6<-cpi5[seq(1, length(cpi5), by=3)]
-  
-  GDP_qtr_2<-ts(cpi6,start = c(start_year,start_qua), frequency=4)
-  
-  y2 <- diff(diff(GDP_qtr_2,4))
-  
-  lowyear<-4+start_year_2
-  upyear<-5+start_year_2
-  real<-as.vector(window(y2, start=c(lowyear, start_qua_2), end=c(upyear, start_qua_2)))
-  
-  GDP_qtr_3<-ts(lag(cpi6),start = c(start_year,start_qua), frequency=4)
-  
-  y3 <- diff(diff(GDP_qtr_3,4))
-  
-  baseline<-as.vector(window(y3,start=c(lowyear, start_qua_2), end=c(upyear, start_qua_2)))
-  
-  cpi7<-as.vector(diff(diff(GDP_qtr,4)))
-  sarima_data<-cpi7[1:(length(cpi7)-1)]
-  sarima_for<-as.vector(arimapred(sarima_data, n.ahead = 5))
-  
-  MSE_lm[i]<-rmse(real[1:3], predict_final_lm[1:3])
-  MSE_qu_1[i]<-rmse(real[1:3], predict_final_qu_1[1:3])
-  MSE_qu_2[i]<-rmse(real[1:3], predict_final_qu_2[1:3])
-  MSE_qu_3[i]<-rmse(real[1:3], predict_final_qu_3[1:3])
-  MSE_ba[i]<-rmse(real[1:3], baseline[1:3])
-  MSE_sa[i]<-rmse(real[1:3],sarima_for[1:3])
-  skew[i]<-skewness(www1)  
-  
-}
-
-
-#output
-mean(abs(skew))
-mean(MSE_lm)
-mean(MSE_qu_2)
-mean(MSE_sa)
-mean(MSE_ba)
-
-
-
-
-
+print(summary_tbl, row.names = FALSE)
