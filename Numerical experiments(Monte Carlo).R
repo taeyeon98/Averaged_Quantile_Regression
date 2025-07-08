@@ -316,5 +316,4 @@ for(sce in all_scenarios){
 
 stopCluster(cl)
 
-cat("\n===== 최종 결과 =====\n")
 print(results_table)
