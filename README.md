@@ -1,7 +1,5 @@
-# Forecasting-data-Using-Dynamic-Factor-Model-and-Quantile-Regression
+R scripts and data for “Forecasting High‑Dimensional Non‑Normal Time Series Using Averaged Quantile Regression.”
 
-#### This page has been created to provide the R-code used in "Forecasting data Using Dynamic Factor Model and Quantile Regression."
-#### It is recommended to read the '3.1_Monte-Carlo' document first to download the package.
-#### (However, since the 'nowcasting' package has been removed from the CRAN repository, its available versions can be obtained from the archive.)
-
-#### The data used in the empirical application can be obtained from the 'inflation data' file on the main page.
+Start with Numerical experiments (Monte Carlo).R to reproduce the simulation study, then run Empirical application to US economic data.R for the CPI forecasting exercise.
+The nowcasting package required by both scripts is no longer on CRAN; please install it from the CRAN‑archive or GitHub mirror before execution.
+All monthly indicators used in the empirical section are provided in US_economic_data.csv.
