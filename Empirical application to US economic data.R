@@ -15,41 +15,17 @@ kocsv$X <- as.Date(kocsv$X)
 ## (A) End‑date sequences ------------------------------------------------------
 ## Rolling‑window end‑date sequences (12 different windows)
 enddate_list <- list(
-  # ① Post‑dot‑com low‑volatility period (4 yr)
-  "2001Q1–2004Q4" = seq(ymd("2001-01-01"), ymd("2005-01-01"), by = "quarter"),
-
-  # ② Low‑rate housing boom (3 yr)
-  "2003Q1–2005Q4" = seq(ymd("2003-01-01"), ymd("2006-01-01"), by = "quarter"),
-
-  # ③ Sub‑prime warning to pre‑crisis (2.5 yr)
+  # ① Pre‑crisis build‑up, sub‑prime warnings (2005 Q3–2007 Q4, 2.5 yr)
   "2005Q3–2007Q4" = seq(ymd("2005-07-01"), ymd("2008-01-01"), by = "quarter"),
-
-  # ④ Global Financial Crisis core (high kurtosis, 2 yr)
+  
+  # ② Global Financial Crisis core (2007 Q3–2009 Q2, 2 yr)
   "2007Q3–2009Q2" = seq(ymd("2007-07-01"), ymd("2009-07-01"), by = "quarter"),
-
-  # ⑤ Immediate post‑crisis + QE1 (3 yr)
-  "2008Q3–2011Q2" = seq(ymd("2008-07-01"), ymd("2011-07-01"), by = "quarter"),
-
-  # ⑥ Trump tax‑cut & trade dispute (3 yr)
-  "2016Q1–2018Q4" = seq(ymd("2016-01-01"), ymd("2019-01-01"), by = "quarter"),
-
-  # ⑦ Two years just before COVID‑19
-  "2018Q1–2019Q4" = seq(ymd("2018-01-01"), ymd("2020-01-01"), by = "quarter"),
-
-  # ⑧ Full 2000s decade (10 yr window)
-  "2001Q1–2010Q4" = seq(ymd("2001-01-01"), ymd("2011-01-01"), by = "quarter"),
-
-  # ⑨ Most recent 11 yr (taper‑tantrum → pandemic → inflation surge)
-  "2013Q1–2023Q4" = seq(ymd("2013-01-01"), ymd("2024-01-01"), by = "quarter"),
-
-  # ⑩ Pre‑crisis through QE1 completion (5 yr)
-  "2006Q1–2010Q4" = seq(ymd("2006-01-01"), ymd("2011-01-01"), by = "quarter"),
-
-  # ⑪ Crisis core + early aftermath (high kurtosis, 3.5 yr)
-  "2007Q3–2010Q4" = seq(ymd("2007-07-01"), ymd("2011-01-01"), by = "quarter"),
-
-  # ⑫ US‑China trade‑war window (high kurtosis, 3.5 yr)
-  "2017Q1–2020Q2" = seq(ymd("2017-01-01"), ymd("2020-07-01"), by = "quarter")
+  
+  # ⑤ Oil‑price bust & dollar strength calm (2014 Q1–2018 Q4, 5 yr)
+  "2014Q1–2018Q4" = seq(ymd("2014-01-01"), ymd("2019-01-01"), by = "quarter"),
+  
+  # ⑥ Pre‑pandemic low‑volatility (2018 Q1–2019 Q4, 2 yr)
+  "2018Q1–2019Q4" = seq(ymd("2018-01-01"), ymd("2020-01-01"), by = "quarter")
 )
 
 train_year <- 4   # training‑window length (years)
